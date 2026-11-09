@@ -1,1 +1,77 @@
-index.html
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#10151d">
+  <title>منصة شجرة الروابط</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <header class="top">
+    <div class="brand">شجرة الروابط</div>
+    <span id="status">منصة الروابط الشخصية</span>
+  </header>
+
+  <main class="container">
+
+    <section class="profile">
+      <div class="avatar" id="avatar">م</div>
+      <h1 id="displayName">محمود للتصميم والبناء</h1>
+      <p id="bio">
+        التصميم الإعلاني والطباعة والديكور الخارجي وواجهات الألوكوبوند
+      </p>
+
+      <div class="contact">
+        <a id="phone" class="btn" href="tel:+0000000000">اتصال</a>
+        <a id="whatsapp" class="btn whatsapp" href="https://wa.me/">واتساب</a>
+      </div>
+    </section>
+
+    <section class="links-section">
+      <h2>روابطي</h2>
+      <div id="links">
+        <a class="link" href="#" onclick="return false">روابطنا ستظهر هنا قريباً</a>
+      </div>
+    </section>
+
+    <section class="admin">
+      <h2>دخول الإدارة</h2>
+
+      <form id="loginForm">
+        <input
+          id="email"
+          type="email"
+          placeholder="البريد الإلكتروني"
+          required
+        >
+
+        <input
+          id="password"
+          type="password"
+          placeholder="كلمة المرور"
+          required
+        >
+
+        <button type="submit" class="btn">تسجيل الدخول</button>
+      </form>
+
+      <button id="logout" class="btn" hidden>
+        تسجيل الخروج
+      </button>
+
+      <p id="message"></p>
+    </section>
+
+  </main>
+
+  <footer>
+    © 2026 منصة شجرة الروابط
+  </footer>
+
+  <script type="module" src="app.js"></script>
+
+</body>
+</html>
