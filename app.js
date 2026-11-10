@@ -13,6 +13,7 @@ import {
   collection,
   addDoc,
   deleteDoc,
+  updateDoc,
   doc,
   onSnapshot,
   serverTimestamp,
@@ -20,7 +21,7 @@ import {
   orderBy
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// إعدادات Firebase
+// Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyAWBoKbZlRNLxQifeLO6Dyjud9q83pvpAk",
   authDomain: "mahmoud-link-tree.firebaseapp.com",
@@ -31,12 +32,10 @@ const firebaseConfig = {
   measurementId: "G-F8EGZ5EV3M"
 };
 
-// بيانات التطبيق
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// رقم المدير المصرح له
 const ADMIN_UID = "N0t92vyGBzVXfT4VgUM4vQZyvvS2";
 
 const loginForm = document.getElementById("loginForm");
@@ -45,113 +44,172 @@ const message = document.getElementById("message");
 const linksContainer = document.getElementById("links");
 const status = document.getElementById("status");
 
-// إنشاء لوحة الإدارة
 const adminPanel = document.createElement("section");
 adminPanel.className = "admin";
 adminPanel.hidden = true;
 
 adminPanel.innerHTML = `
-  <h2>لوحة إدارة الروابط</h2>
+  <h2>إدارة الروابط</h2>
   <form id="addLinkForm">
-    <input id="linkTitle" type="text"
-      placeholder="اسم الرابط" required maxlength="80">
-
+    <input id="linkTitle" placeholder="اسم الرابط"
+      required maxlength="80">
     <input id="linkUrl" type="url"
-      placeholder="رابط الموقع https://..." required>
-
-    <button type="submit" class="btn">
-      إضافة الرابط
-    </button>
+      placeholder="https://example.com" required>
+    <button class="btn" type="submit">إضافة رابط جديد</button>
   </form>
   <p id="adminMessage"></p>
   <div id="manageLinks"></div>
 `;
 
-document.querySelector(".links-section")
-  .after(adminPanel);
+document.querySelector(".links-section").after(adminPanel);
 
 const addLinkForm = document.getElementById("addLinkForm");
 const adminMessage = document.getElementById("adminMessage");
 const manageLinks = document.getElementById("manageLinks");
 
-// رسائل الحالة
+let allLinks = [];
+let currentUser = null;
+
+function isAdmin() {
+  return currentUser?.uid === ADMIN_UID;
+}
+
 function showMessage(text, color = "#d6b56d") {
   message.textContent = text;
   message.style.color = color;
 }
 
-// عرض الروابط للزوار
-function displayLink(id, data) {
-  const a = document.createElement("a");
-  a.className = "link";
-  a.href = data.url;
-  a.target = "_blank";
-  a.rel = "noopener noreferrer";
-  a.textContent = data.title;
-  return a;
+function validUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
-// متابعة الروابط مباشرة من Firestore
-const linksQuery = query(
-  collection(db, "links"),
-  orderBy("createdAt", "desc")
-);
-
-onSnapshot(linksQuery, (snapshot) => {
+// عرض الروابط للزوار
+function renderLinks() {
   linksContainer.replaceChildren();
-  manageLinks.replaceChildren();
 
-  if (snapshot.empty) {
-    const empty = document.createElement("p");
+  if (allLinks.length === 0) {
+    const empty = document.createElement("div");
     empty.className = "link";
     empty.textContent = "لا توجد روابط حالياً";
     linksContainer.appendChild(empty);
     return;
   }
 
-  snapshot.forEach((item) => {
-    const data = item.data();
-
-    linksContainer.appendChild(displayLink(item.id, data));
-
-    // أزرار الإدارة تظهر للمدير فقط
-    if (auth.currentUser?.uid === ADMIN_UID) {
-      const row = document.createElement("div");
-      row.style.cssText =
-        "display:flex;gap:10px;align-items:center;margin:10px 0;";
-
-      const title = document.createElement("span");
-      title.textContent = data.title;
-      title.style.flex = "1";
-
-      const deleteButton = document.createElement("button");
-      deleteButton.type = "button";
-      deleteButton.className = "btn";
-      deleteButton.textContent = "حذف";
-      deleteButton.style.background = "#492020";
-
-      deleteButton.addEventListener("click", async () => {
-        if (!confirm("هل تريد حذف هذا الرابط؟")) return;
-
-        try {
-          await deleteDoc(doc(db, "links", item.id));
-          adminMessage.textContent = "تم حذف الرابط بنجاح";
-        } catch (error) {
-          adminMessage.textContent = "تعذر حذف الرابط: " + error.message;
-        }
-      });
-
-      row.append(title, deleteButton);
-      manageLinks.appendChild(row);
-    }
+  allLinks.forEach(item => {
+    const link = document.createElement("a");
+    link.className = "link";
+    link.href = item.url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = item.title;
+    linksContainer.appendChild(link);
   });
-}, (error) => {
+}
+
+// عرض لوحة الإدارة
+function renderAdminLinks() {
+  manageLinks.replaceChildren();
+
+  if (!isAdmin()) return;
+
+  allLinks.forEach(item => {
+    const row = document.createElement("div");
+    row.style.cssText =
+      "background:#252525;padding:12px;border-radius:12px;margin:12px 0;";
+
+    const title = document.createElement("p");
+    title.textContent = item.title;
+    title.style.cssText = "color:white;margin-bottom:10px;";
+
+    const edit = document.createElement("button");
+    edit.className = "btn";
+    edit.type = "button";
+    edit.textContent = "تعديل";
+
+    edit.addEventListener("click", async () => {
+      const newTitle = prompt("اسم الرابط الجديد:", item.title);
+      if (newTitle === null) return;
+
+      const cleanTitle = newTitle.trim();
+      if (!cleanTitle || cleanTitle.length > 80) {
+        alert("اكتب اسماً صحيحاً لا يتجاوز 80 حرفاً");
+        return;
+      }
+
+      const newUrl = prompt("الرابط الجديد:", item.url);
+      if (newUrl === null) return;
+
+      const cleanUrl = newUrl.trim();
+
+      if (!validUrl(cleanUrl)) {
+        alert("الرابط غير صالح. استخدم https أو http");
+        return;
+      }
+
+      try {
+        await updateDoc(doc(db, "links", item.id), {
+          title: cleanTitle,
+          url: cleanUrl
+        });
+        adminMessage.textContent = "تم تعديل الرابط بنجاح";
+      } catch (error) {
+        adminMessage.textContent = "تعذر التعديل: " + error.message;
+      }
+    });
+
+    const remove = document.createElement("button");
+    remove.className = "btn";
+    remove.type = "button";
+    remove.textContent = "حذف";
+    remove.style.cssText =
+      "background:#492020;border-color:#a44;margin-right:8px;";
+
+    remove.addEventListener("click", async () => {
+      if (!confirm("هل أنت متأكد من حذف هذا الرابط؟")) return;
+
+      try {
+        await deleteDoc(doc(db, "links", item.id));
+        adminMessage.textContent = "تم حذف الرابط بنجاح";
+      } catch (error) {
+        adminMessage.textContent = "تعذر الحذف: " + error.message;
+      }
+    });
+
+    row.append(title, edit, remove);
+    manageLinks.appendChild(row);
+  });
+}
+
+function renderAll() {
+  renderLinks();
+  renderAdminLinks();
+}
+
+// متابعة قاعدة البيانات
+const linksQuery = query(
+  collection(db, "links"),
+  orderBy("createdAt", "desc")
+);
+
+onSnapshot(linksQuery, snapshot => {
+  allLinks = snapshot.docs.map(item => ({
+    id: item.id,
+    ...item.data()
+  }));
+
+  renderAll();
+}, error => {
   console.error(error);
-  showMessage("تعذر تحميل الروابط. تحقق من قواعد Firestore.", "#ff7777");
+  showMessage("تعذر تحميل الروابط. تحقق من إعدادات Firestore.", "#ff7777");
 });
 
 // تسجيل الدخول
-loginForm.addEventListener("submit", async (event) => {
+loginForm.addEventListener("submit", async event => {
   event.preventDefault();
 
   const email = document.getElementById("email").value.trim();
@@ -161,16 +219,16 @@ loginForm.addEventListener("submit", async (event) => {
     await signInWithEmailAndPassword(auth, email, password);
     loginForm.reset();
   } catch (error) {
-    showMessage("فشل تسجيل الدخول. تحقق من البريد وكلمة المرور.", "#ff7777");
+    showMessage("تعذر تسجيل الدخول. تحقق من بيانات الحساب.", "#ff7777");
     console.error(error);
   }
 });
 
-// إضافة رابط جديد
-addLinkForm.addEventListener("submit", async (event) => {
+// إضافة رابط
+addLinkForm.addEventListener("submit", async event => {
   event.preventDefault();
 
-  if (auth.currentUser?.uid !== ADMIN_UID) {
+  if (!isAdmin()) {
     adminMessage.textContent = "ليس لديك صلاحية الإدارة";
     return;
   }
@@ -178,51 +236,57 @@ addLinkForm.addEventListener("submit", async (event) => {
   const title = document.getElementById("linkTitle").value.trim();
   const url = document.getElementById("linkUrl").value.trim();
 
+  if (!title || title.length > 80 || !validUrl(url)) {
+    adminMessage.textContent = "يرجى إدخال اسم ورابط صحيحين";
+    return;
+  }
+
   try {
-    const parsedUrl = new URL(url);
-
-    if (!["https:", "http:"].includes(parsedUrl.protocol)) {
-      throw new Error("رابط غير صالح");
-    }
-
     await addDoc(collection(db, "links"), {
       title,
-      url: parsedUrl.href,
+      url,
       createdAt: serverTimestamp()
     });
 
     addLinkForm.reset();
     adminMessage.textContent = "تمت إضافة الرابط بنجاح";
   } catch (error) {
-    adminMessage.textContent = "تعذرت إضافة الرابط: " + error.message;
+    adminMessage.textContent = "تعذرت الإضافة: " + error.message;
   }
 });
 
 // تسجيل الخروج
 logoutButton.addEventListener("click", async () => {
-  await signOut(auth);
+  try {
+    await signOut(auth);
+  } catch (error) {
+    showMessage("تعذر تسجيل الخروج", "#ff7777");
+  }
 });
 
-// متابعة حالة تسجيل الدخول
-onAuthStateChanged(auth, (user) => {
-  if (user && user.uid === ADMIN_UID) {
+// مراقبة الحساب
+onAuthStateChanged(auth, user => {
+  currentUser = user;
+
+  if (isAdmin()) {
     loginForm.hidden = true;
     logoutButton.hidden = false;
     adminPanel.hidden = false;
-    status.textContent = "مرحباً بك في لوحة الإدارة";
-    showMessage("تم تسجيل الدخول بنجاح");
+    status.textContent = "لوحة إدارة محمود";
+    showMessage("أهلاً بك في لوحة الإدارة");
   } else {
     loginForm.hidden = false;
     logoutButton.hidden = true;
     adminPanel.hidden = true;
 
+    status.textContent = "منصة الروابط الشخصية";
+
     if (user) {
-      status.textContent = "حساب غير مصرح له";
-      showMessage("هذا الحساب ليس حساب المدير.", "#ff7777");
+      showMessage("هذا الحساب غير مصرح له بالإدارة.", "#ff7777");
     } else {
-      status.textContent = "منصة الروابط الشخصية";
       showMessage("");
     }
   }
-});
 
+  renderAll();
+});
